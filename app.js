@@ -753,10 +753,44 @@ function handleBleDisconnected(event) {
   }
 }
 
+function getWebBluetoothUnavailableReason() {
+  if (location.protocol === 'file:') {
+    return 'BLE bị khóa khi mở file trực tiếp. Hãy mở giao diện bằng HTTPS hoặc localhost.';
+  }
+  if (!window.isSecureContext) {
+    return 'BLE bị khóa vì trang không dùng HTTPS. Hãy mở đúng địa chỉ HTTPS của giao diện.';
+  }
+  try {
+    if (window.self !== window.top) {
+      return 'BLE bị khóa trong cửa sổ xem trước. Hãy mở giao diện trực tiếp ở một tab mới.';
+    }
+  } catch (_) {
+    return 'BLE bị khóa trong cửa sổ nhúng. Hãy mở giao diện trực tiếp ở một tab mới.';
+  }
+  try {
+    const policy = document.permissionsPolicy || document.featurePolicy;
+    if (policy?.allowsFeature && !policy.allowsFeature('bluetooth')) {
+      return 'Trang đang bị chặn quyền Bluetooth bởi trình duyệt hoặc khung nhúng.';
+    }
+  } catch (_) {
+    /* Older Chromium builds do not expose Bluetooth in Permissions Policy. */
+  }
+  if (!navigator.bluetooth ||
+      typeof navigator.bluetooth.requestDevice !== 'function') {
+    const isCocCoc = /coc_coc_browser|coccoc/i.test(navigator.userAgent || '');
+    return isCocCoc
+      ? 'Cốc Cốc hiện không cung cấp Web Bluetooth cho trang này. Hãy cập nhật Cốc Cốc và mở trực tiếp bằng HTTPS; nếu vẫn lỗi, dùng Chrome hoặc Edge.'
+      : 'Trình duyệt hiện không cung cấp Web Bluetooth. Hãy dùng Chrome hoặc Edge trên trang HTTPS.';
+  }
+  return '';
+}
+
 async function connectBleWeb() {
-  if (!navigator.bluetooth) {
-    setBleLinkState('Trình duyệt không hỗ trợ BLE Web', 'bad');
-    setTxStatus('trình duyệt không hỗ trợ BLE Web', 'bad');
+  const unavailableReason = getWebBluetoothUnavailableReason();
+  if (unavailableReason) {
+    setBleLinkState(unavailableReason, 'bad');
+    setTxStatus('BLE Web chưa sẵn sàng', 'bad');
+    appendRxLog(unavailableReason);
     return;
   }
   bleManualDisconnect = false;
@@ -1340,16 +1374,8 @@ function handleUserModeAck(command, status) {
   renderActiveUserMode();
   setUserModeStatus(`Đang dùng Mode ${modeNumber}`, 'ok');
   setTxStatus(`đã áp dụng Mode ${modeNumber}`, 'ok');
-  window.setTimeout(() => {
-    requestDspConfigFromChip()
-      .then((synced) => {
-        if (synced && (firmwareCapabilities & DSP_CAP_CHANNEL_TRIMS)) {
-          return requestFirmwareCapabilities();
-        }
-        return false;
-      })
-      .catch(() => {});
-  }, 120);
+  syncAfterOutputEqBankChange('Đang cập nhật topology và EQ của Mode...')
+    .catch(() => {});
 }
 
 function applyPowerStatus(value, bytes) {
@@ -1645,12 +1671,14 @@ function handleBleRxNotification(event) {
               ? 'Đã chuyển sang ba kênh đầu ra độc lập. Bấm Lưu để giữ sau khi tắt nguồn.'
               : 'Đã chuyển về hệ thống 2.1. Bấm Lưu để giữ sau khi tắt nguồn.');
           setTxStatus('đã đổi kiểu đường tiếng', 'ok');
+          syncAfterOutputEqBankChange('Đang tải bank EQ của chế độ mới...')
+            .catch(() => {});
         } else {
           setTxStatus(`đổi kiểu đường tiếng lỗi ${bytes[3]}`, 'bad');
           setTopologyStatus(currentTopologyMode,
             'Không đổi được kiểu đường tiếng; đang đọc lại trạng thái thiết bị.');
+          requestFirmwareCapabilities().catch(() => {});
         }
-        requestFirmwareCapabilities().catch(() => {});
       } else if (command === DSP_CMD_SET_OUTPUT_SOURCE) {
         setTxStatus(ok ? 'đã đổi nguồn tín hiệu' : `đổi nguồn tín hiệu lỗi ${bytes[3]}`,
           ok ? 'ok' : 'bad');
@@ -2085,6 +2113,23 @@ async function requestDspConfigFromChip() {
     }
   }
   return false;
+}
+
+async function syncAfterOutputEqBankChange(message) {
+  /* Firmware queues one complete snapshot after the ACK. Arm the receiver
+   * immediately so the first CONFIG_BEGIN cannot be missed. */
+  let synced = await prepareDspConfigSync(message);
+  if (!synced) {
+    appendRxLog('Đang yêu cầu gửi lại bank EQ từ thiết bị');
+    synced = await requestDspConfigFromChip();
+  }
+  if (!synced) {
+    appendRxLog('Không cập nhật được bank EQ của chế độ mới');
+    return false;
+  }
+  await requestFirmwareCapabilities();
+  renderMcuConfigOnInterface();
+  return true;
 }
 
 async function syncAfterResetDefaults() {
