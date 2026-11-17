@@ -3786,6 +3786,7 @@ body.connection-gate-active .connect-gate {
 .connect-gate-card h1 { margin: 0; color: var(--text); font-size: clamp(26px, 5vw, 36px); }
 .connect-gate-description { margin: 12px auto 24px; max-width: 360px; color: var(--muted); line-height: 1.5; }
 .connect-gate-button { width: min(100%, 400px); min-width: 0; min-height: 46px; font-size: 16px; font-weight: 750; }
+.connect-gate-actions { display: grid; gap: 10px; width: min(100%, 400px); margin: 0 auto; }
 .connect-gate-card .ble-link-state { margin: 18px 0 0; overflow-wrap: anywhere; }
 .connect-gate-hint { margin: 18px 0 0; color: var(--muted); font-size: 12px; }
 .topbar-connection { margin-left: auto; display: flex; align-items: center; gap: 9px; }

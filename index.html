@@ -8,7 +8,7 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" sizes="192x192" href="./pwa-icon-192.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="./pwa-icon-192.png" />
-  <link rel="stylesheet" href="./styles.css?v=20261108-decoupled1" />
+  <link rel="stylesheet" href="./styles.css?v=20261117-access-gate1" />
 </head>
 <body class="connection-gate-active">
   <header class="topbar">
@@ -35,7 +35,9 @@
       <p class="connect-gate-kicker">SOUND PROGRAMMING</p>
       <h1 id="connect-gate-title">Kết nối thiết bị</h1>
       <p class="connect-gate-description">Kết nối BLE với BP1048B2 để mở bảng điều khiển DSP.</p>
-      <button id="btn-ble-toggle" class="connect-gate-button">Kết nối</button>
+      <div class="connect-gate-actions">
+        <button id="btn-ble-toggle" class="connect-gate-button">Kết nối</button>
+      </div>
       <p id="ble-link-state" class="ble-link-state">Trạng thái kết nối: Chưa kết nối BLE Web</p>
       <p class="connect-gate-hint">Lần đầu, hãy chọn thiết bị trong hộp thoại của trình duyệt.</p>
     </div>
@@ -57,7 +59,14 @@
           <details class="card output-control-card" open>
             <summary>Điều khiển đầu ra</summary>
             <div class="grid">
-              <label>Âm lượng riêng L / Mid<input id="trim-l" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
+              <label hidden>Nguồn tín hiệu
+                <select id="output-source-1" data-output-index="0" disabled>
+                  <option value="0">Mono</option>
+                  <option value="1" selected>Trái (L)</option>
+                  <option value="2">Phải (R)</option>
+                </select>
+              </label>
+              <label>Âm lượng riêng Kênh 1<input id="trim-l" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
               <label>Master Music (núm thiết bị)<input id="l-gain" type="range" min="0" max="100" value="40" disabled /></label>
             </div>
           </details>
@@ -92,11 +101,11 @@
           </details>
 
           <details class="card">
-            <summary>EQ động Stereo (L + R)</summary>
+            <summary>EQ động dùng chung trước định tuyến</summary>
             <div class="dynamics-wrap">
               <div class="dyn-card dyn-card-eq">
                 <div class="dsp-runtime-header">
-                  <span>Dùng chung cho hai kênh nhạc (Stereo-linked)</span>
+                  <span>Xử lý tín hiệu nhạc L/R trước khi chọn nguồn cho từng kênh</span>
                   <button id="dyn-eq-toggle" class="tiny-toggle" type="button" aria-pressed="true" aria-label="Bật tắt Dynamic EQ">
                     <span class="tiny-toggle-knob" aria-hidden="true"></span>
                   </button>
@@ -169,7 +178,14 @@
           <details class="card output-control-card" open>
             <summary>Điều khiển đầu ra</summary>
             <div class="grid">
-              <label>Âm lượng riêng R / High<input id="trim-r" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
+              <label hidden>Nguồn tín hiệu
+                <select id="output-source-2" data-output-index="1" disabled>
+                  <option value="0">Mono</option>
+                  <option value="1">Trái (L)</option>
+                  <option value="2" selected>Phải (R)</option>
+                </select>
+              </label>
+              <label>Âm lượng riêng Kênh 2<input id="trim-r" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
               <label>Master Music (núm thiết bị)<input id="r-gain" type="range" min="0" max="100" value="40" disabled /></label>
             </div>
           </details>
@@ -204,7 +220,7 @@
           </details>
 
           <div class="card shared-dsp-note">
-            EQ động và DRC được xử lý liên kết Stereo cho cả L/R. Điều chỉnh tại mục Kênh Trái (L).
+            EQ động và DRC xử lý tín hiệu nhạc dùng chung trước khi định tuyến. Điều chỉnh tại mục Kênh 1.
           </div>
 
         </div>
@@ -216,7 +232,14 @@
           <details class="card output-control-card" open>
             <summary>Điều khiển đầu ra</summary>
             <div class="grid">
-              <label>Âm lượng riêng Sub / Low<input id="trim-sub" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
+              <label hidden>Nguồn tín hiệu
+                <select id="output-source-3" data-output-index="2" disabled>
+                  <option value="0" selected>Mono</option>
+                  <option value="1">Trái (L)</option>
+                  <option value="2">Phải (R)</option>
+                </select>
+              </label>
+              <label>Âm lượng riêng Kênh 3<input id="trim-sub" type="range" min="0" max="100" value="100" data-unit="%" disabled /></label>
               <label>Master Music (núm thiết bị)<input id="sub-gain" type="range" min="0" max="100" value="68" disabled /></label>
             </div>
           </details>
@@ -262,18 +285,6 @@
             </div>
           </details>
 
-          <details class="card" open>
-            <summary>Pha (Phase)</summary>
-            <div class="phase-wrap">
-              <button id="sub-phase-toggle" class="sub-segment-toggle" type="button" aria-pressed="false" data-phase="0">
-                <span class="sub-segment-label phase-label-0 is-active">0°</span>
-                <span class="sub-segment-knob" aria-hidden="true"></span>
-                <span class="sub-segment-label phase-label-180">180°</span>
-              </button>
-              <div id="sub-phase-state" class="sub-segment-state">Hiện tại: 0°</div>
-            </div>
-          </details>
-
           <details class="card" open style="display:none">
             <summary>Đường trễ (Delay Line)</summary>
             <div class="grid">
@@ -290,6 +301,7 @@
             <summary>Điều khiển đầu ra</summary>
             <div class="grid">
               <label>Master Mic (núm thiết bị)<input id="mic-output-gain" type="range" min="0" max="100" value="58" disabled /></label>
+              <label>Master Effect (núm thiết bị)<input id="fx-master" type="range" min="0" max="100" value="100" disabled /></label>
             </div>
           </details>
 
@@ -365,7 +377,7 @@
                   <label class="dyn-fader"><span>Mức hiệu ứng (Level)</span><div class="dyn-fader-rail"><input id="rv-level" type="range" min="0" max="100" value="70" /></div></label>
                   <label class="dyn-fader"><span>Trễ trước (Pre Delay)</span><div class="dyn-fader-rail"><input id="rv-pre-delay" type="range" min="0" max="100" value="20" data-unit="ms" /></div></label>
                    <label class="dyn-fader"><span>Độ ngân (Decay tương đối)</span><div class="dyn-fader-rail"><input id="rv-decay" type="range" min="0" max="100" step="1" value="18" /></div></label>
-                  <label class="dyn-fader"><span>Tỷ lệ trộn (Mix)</span><div class="dyn-fader-rail"><input id="rv-mix" type="range" min="0" max="100" value="80" /></div></label>
+                  <label class="dyn-fader"><span>Cân bằng Reverb</span><div class="dyn-fader-rail"><input id="rv-mix" type="range" min="0" max="100" value="25" /></div></label>
                   <label class="dyn-fader"><span>Không gian (Room)</span><div class="dyn-fader-rail"><input id="rv-room" type="range" min="0" max="100" value="70" /></div></label>
                   <label class="dyn-fader"><span>Giảm cao (Damping)</span><div class="dyn-fader-rail"><input id="rv-damping" type="range" min="0" max="100" value="30" /></div></label>
                 </div>
@@ -381,7 +393,7 @@
                   <label class="dyn-fader"><span>Mức hiệu ứng (Level)</span><div class="dyn-fader-rail"><input id="echo-level" type="range" min="0" max="100" value="70" /></div></label>
                   <label class="dyn-fader"><span>Thời gian trễ (Delay)</span><div class="dyn-fader-rail"><input id="echo-delay" type="range" min="1" max="300" value="180" data-unit="ms" /></div></label>
                   <label class="dyn-fader"><span>Lặp lại (Repeat)</span><div class="dyn-fader-rail"><input id="echo-repeat" type="range" min="0" max="100" value="35" /></div></label>
-                  <label class="dyn-fader"><span>Tỷ lệ trộn (Mix)</span><div class="dyn-fader-rail"><input id="echo-mix" type="range" min="0" max="100" value="55" /></div></label>
+                  <label class="dyn-fader"><span>Cân bằng Echo</span><div class="dyn-fader-rail"><input id="echo-mix" type="range" min="0" max="100" value="25" /></div></label>
                 </div>
               </div>
             </div>
@@ -410,7 +422,7 @@
             <label>Chế độ hệ thống
               <select id="topology-mode" disabled>
                 <option value="0">2.1 — Trái, Phải và Sub</option>
-                <option value="1">3-way — Low, Mid và High</option>
+                <option value="1">3 kênh độc lập</option>
               </select>
             </label>
             <p id="topology-status" class="system-note">Đang chờ nhận cấu hình thiết bị.</p>
@@ -562,6 +574,6 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=20261108-decoupled1"></script>
+  <script src="./app.js?v=20261117-access-gate1"></script>
 </body>
 </html>

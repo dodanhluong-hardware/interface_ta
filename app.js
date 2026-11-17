@@ -43,7 +43,7 @@ const BLE_RECONNECT_DELAYS_MS = [0, 1000, 2500, 5000];
 const BLE_RECONNECT_MIN_DELAY_MS = 350;
 const DSP_CMD_SAVE_CONFIG = 0x08;
 const DSP_CMD_GET_CONFIG = 0x09;
-const DSP_CMD_SET_SUB_PHASE = 0x0a;
+const DSP_CMD_LEGACY_SUB_PHASE = 0x0a;
 const DSP_CMD_SET_BT_NAME = 0x0b;
 const DSP_CMD_SET_BLE_NAME = 0x0c;
 const DSP_CMD_SET_KC_MODE = 0x0d;
@@ -65,11 +65,13 @@ const DSP_EVENT_AUDIO_METER = 0x87;
 const DSP_EVENT_CAPABILITIES = 0x88;
 const DSP_CMD_GET_CAPABILITIES = 0x12;
 const DSP_CMD_SET_TOPOLOGY = 0x13;
+const DSP_CMD_SET_OUTPUT_SOURCE = 0x14;
 const DSP_CAP_CHANNEL_TRIMS = 1 << 0;
 const DSP_CAP_MIC_INPUT_TRIMS = 1 << 1;
 const DSP_CAP_POT_MASTERS = 1 << 2;
 const DSP_CAP_TOPOLOGY_SELECT = 1 << 3;
 const DSP_CAP_THREE_WAY = 1 << 4;
+const DSP_CAP_OUTPUT_SOURCE_SELECT = 1 << 5;
 const BLE_READY_TIMEOUT_MS = 900;
 const BLE_SETUP_RETRY_DELAYS_MS = [150, 350, 800];
 const CONFIG_SYNC_INACTIVITY_MS = 3000;
@@ -81,8 +83,7 @@ const CONFIG_SYNC_REQUIRED_ITEMS = 67;
  * riêng từng kênh và vẫn được phép gửi xuống firmware. */
 const ADC_VOLUME_MODE = true;
 const ADC_OWNED_CONTROL_IDS = [
-  'l-gain', 'r-gain', 'sub-gain', 'mic-output-gain',
-  'echo-mix', 'rv-mix',
+  'l-gain', 'r-gain', 'sub-gain', 'mic-output-gain', 'fx-master',
 ];
 const CHANNEL_TRIM_CONTROL_IDS = [
   'trim-l', 'trim-r', 'trim-sub', 'trim-mic1', 'trim-mic2',
@@ -126,6 +127,11 @@ function applyHardwareVolumeOwnership() {
   if (topology) topology.disabled =
     (firmwareCapabilities & DSP_CAP_TOPOLOGY_SELECT) === 0
       || pendingTopologyMode != null;
+  document.querySelectorAll('[data-output-index]').forEach((control) => {
+    control.disabled =
+      currentTopologyMode !== 1
+      || (firmwareCapabilities & DSP_CAP_OUTPUT_SOURCE_SELECT) === 0;
+  });
 }
 
 const preampBandChipsL = document.querySelectorAll('#ch-l .band-chip[data-band]');
@@ -144,9 +150,7 @@ const eqSvgSub = document.querySelector('#eq-path-sub')?.ownerSVGElement || null
 const eqSvgMic1 = document.querySelector('#eq-path-mic1')?.ownerSVGElement || null;
 const eqSvgMic2 = document.querySelector('#eq-path-mic2')?.ownerSVGElement || null;
 const subModeToggle = document.getElementById('sub-mode-toggle');
-const subPhaseToggle = document.getElementById('sub-phase-toggle');
 const subModeState = document.getElementById('sub-mode-state');
-const subPhaseState = document.getElementById('sub-phase-state');
 const micAfbToggle = document.getElementById('mic-afb-toggle');
 const dynEqToggle = document.getElementById('dyn-eq-toggle');
 const drcToggle = document.getElementById('drc-toggle');
@@ -200,6 +204,7 @@ let firmwareCapabilities = 0;
 let capabilityResolve = null;
 let capabilityTimer = null;
 let pendingTopologyMode = null;
+let currentTopologyMode = 0;
 
 function traceBlePhase(phase, detail = '') {
   bleTracePhase = phase;
@@ -375,8 +380,13 @@ function showConnectScreen() {
 }
 
 function showDspScreen() {
+  if (!connected || !bleTxCharacteristic) {
+    showConnectScreen();
+    return false;
+  }
   document.body.classList.remove('connection-gate-active');
   if (connectGate) connectGate.setAttribute('aria-hidden', 'true');
+  return true;
 }
 
 function syncTopbarPanelTitle(tabEl) {
@@ -1215,14 +1225,36 @@ function setControlValueFromMcu(id, value) {
   }
 }
 
-function setTopologyStatus(mode, message = '') {
+function applyTopologyUi(mode) {
+  const threeWay = Number(mode) === 1;
+  const labels = threeWay
+    ? { 'ch-l': 'Kênh 1', 'ch-r': 'Kênh 2', 'ch-sub': 'Kênh 3' }
+    : { 'ch-l': 'Kênh Trái (L)', 'ch-r': 'Kênh Phải (R)', 'ch-sub': 'Kênh Sub' };
+
+  currentTopologyMode = threeWay ? 1 : 0;
+  Object.entries(labels).forEach(([panelId, label]) => {
+    const tab = document.querySelector(`.tab[data-panel="${panelId}"]`);
+    const heading = document.querySelector(`#${panelId} > h2`);
+    if (tab) tab.textContent = label;
+    if (heading) heading.textContent = label;
+  });
+  document.querySelectorAll('[data-output-index]').forEach((control) => {
+    const host = control.closest('label');
+    if (host) host.hidden = !threeWay;
+  });
+  syncTopbarPanelTitle(document.querySelector('.tab.active'));
+  applyHardwareVolumeOwnership();
+}
+
+function setTopologyStatus(mode, message = '', commitUi = true) {
   const topology = document.getElementById('topology-mode');
   const status = document.getElementById('topology-status');
   const normalizedMode = Number(mode) === 1 ? 1 : 0;
   if (topology) topology.value = String(normalizedMode);
+  if (commitUi) applyTopologyUi(normalizedMode);
   if (status) {
     status.textContent = message || (normalizedMode
-      ? 'Đang dùng ba đường Low, Mid và High độc lập. Bấm Lưu để giữ sau khi tắt nguồn.'
+      ? 'Đang dùng ba kênh đầu ra độc lập. Bấm Lưu để giữ sau khi tắt nguồn.'
       : 'Đang dùng hệ thống 2.1. Bấm Lưu để giữ sau khi tắt nguồn.');
   }
 }
@@ -1233,13 +1265,13 @@ async function applyTopologySelection(control) {
   pendingTopologyMode = requestedMode;
   applyHardwareVolumeOwnership();
   setTopologyStatus(requestedMode, requestedMode
-    ? 'Đang chuyển sang ba đường Low, Mid và High...'
-    : 'Đang chuyển về hệ thống 2.1...');
+    ? 'Đang chuyển sang ba kênh đầu ra độc lập...'
+    : 'Đang chuyển về hệ thống 2.1...', false);
   const sent = await sendTx(`topology-mode:${requestedMode}`);
   if (!sent) {
     pendingTopologyMode = null;
-    applyHardwareVolumeOwnership();
-    setTopologyStatus(requestedMode, 'Không gửi được yêu cầu đổi kiểu đường tiếng.');
+    setTopologyStatus(currentTopologyMode,
+      'Không gửi được yêu cầu đổi kiểu đường tiếng.');
   }
 }
 
@@ -1389,7 +1421,7 @@ function getConfigItemKey(bytes) {
   if ((command === 0x03 || command === 0x04) && bytes.length === 6) {
     return `effect:${command}:${bytes[3]}`;
   }
-  if ([0x05, 0x06, 0x07, DSP_CMD_SET_SUB_PHASE, DSP_CMD_SET_BT_NAME,
+  if ([0x05, 0x06, 0x07, DSP_CMD_LEGACY_SUB_PHASE, DSP_CMD_SET_OUTPUT_SOURCE, DSP_CMD_SET_BT_NAME,
     DSP_CMD_SET_BLE_NAME, DSP_CMD_SET_KC_MODE, DSP_CMD_SET_STARTUP_LEVELS].includes(command)) {
     return `single:${command}`;
   }
@@ -1430,10 +1462,17 @@ function applyMcuConfigItem(value, bytes) {
     return true;
   }
 
-  if (command === DSP_CMD_SET_SUB_PHASE && bytes.length === 4) {
-    syncSubPhaseUI(bytes[3] !== 0 ? 180 : 0);
+  if (command === DSP_CMD_SET_OUTPUT_SOURCE && bytes.length === 6) {
+    [0, 1, 2].forEach((output) => {
+      const control = document.getElementById(`output-source-${output + 1}`);
+      if (control) control.value = String(Math.min(2, bytes[3 + output]));
+    });
     return true;
   }
+
+  // Firmware cũ gửi phase tại vị trí snapshot này. Chỉ tính mục để hoàn tất
+  // đồng bộ; giao diện mới không hiển thị hoặc gửi lại tính năng phase.
+  if (command === DSP_CMD_LEGACY_SUB_PHASE && bytes.length === 4) return true;
 
   if (command === DSP_CMD_SET_KC_MODE && bytes.length === 4) {
     if (kcModeSelect) kcModeSelect.value = String(Math.min(2, bytes[3]));
@@ -1530,7 +1569,14 @@ function handleBleRxNotification(event) {
       setControlValueFromMcu('r-gain', bytes[11]);
       setControlValueFromMcu('sub-gain', bytes[11]);
       setControlValueFromMcu('mic-output-gain', bytes[12]);
+      setControlValueFromMcu('fx-master', bytes[13]);
       setTopologyStatus(bytes[14]);
+      if (bytes.length >= 18) {
+        [0, 1, 2].forEach((output) => {
+          const control = document.getElementById(`output-source-${output + 1}`);
+          if (control) control.value = String(Math.min(2, bytes[15 + output]));
+        });
+      }
       applyHardwareVolumeOwnership();
       finishCapabilityWait(true);
       traceBlePhase('CAPABILITIES',
@@ -1558,7 +1604,10 @@ function handleBleRxNotification(event) {
           if (eqPresetSel) eqPresetSel.value = 'eq1';
           resetEqChartsToFirmwareDefaults();
           syncSubModeUI('mono');
-          syncSubPhaseUI(0);
+          [1, 2, 3].forEach((channel, output) => {
+            const control = document.getElementById(`output-source-${channel}`);
+            if (control) control.value = String([1, 2, 0][output]);
+          });
           if (kcModeSelect) kcModeSelect.value = '0';
           activeUserModeSlot = null;
           renderActiveUserMode();
@@ -1588,18 +1637,23 @@ function handleBleRxNotification(event) {
       } else if (command === DSP_CMD_SET_TOPOLOGY) {
         const requestedMode = pendingTopologyMode;
         pendingTopologyMode = null;
-        applyHardwareVolumeOwnership();
         if (ok) {
-          setTopologyStatus(requestedMode,
-            requestedMode === 1
-              ? 'Đã chuyển sang ba đường Low, Mid và High. Bấm Lưu để giữ sau khi tắt nguồn.'
+          const confirmedMode = requestedMode == null
+            ? currentTopologyMode : requestedMode;
+          setTopologyStatus(confirmedMode,
+            confirmedMode === 1
+              ? 'Đã chuyển sang ba kênh đầu ra độc lập. Bấm Lưu để giữ sau khi tắt nguồn.'
               : 'Đã chuyển về hệ thống 2.1. Bấm Lưu để giữ sau khi tắt nguồn.');
           setTxStatus('đã đổi kiểu đường tiếng', 'ok');
         } else {
           setTxStatus(`đổi kiểu đường tiếng lỗi ${bytes[3]}`, 'bad');
-          const status = document.getElementById('topology-status');
-          if (status) status.textContent = 'Không đổi được kiểu đường tiếng; đang đọc lại trạng thái thiết bị.';
+          setTopologyStatus(currentTopologyMode,
+            'Không đổi được kiểu đường tiếng; đang đọc lại trạng thái thiết bị.');
         }
+        requestFirmwareCapabilities().catch(() => {});
+      } else if (command === DSP_CMD_SET_OUTPUT_SOURCE) {
+        setTxStatus(ok ? 'đã đổi nguồn tín hiệu' : `đổi nguồn tín hiệu lỗi ${bytes[3]}`,
+          ok ? 'ok' : 'bad');
         requestFirmwareCapabilities().catch(() => {});
       } else {
         setTxStatus(ok ? 'đã xác nhận' : `xác nhận lỗi ${bytes[3]}`, ok ? 'ok' : 'bad');
@@ -1878,6 +1932,11 @@ function buildBlePacket(tag) {
   const topologyMatch = tag.match(/^topology-mode:([01])$/);
   if (topologyMatch) return Uint8Array.of(0xa5, DSP_CMD_SET_TOPOLOGY,
     Number(topologyMatch[1]));
+  const outputSourceMatch = tag.match(/^output-source:([0-2]):([0-2])$/);
+  if (outputSourceMatch) {
+    return Uint8Array.of(0xa5, DSP_CMD_SET_OUTPUT_SOURCE,
+      Number(outputSourceMatch[1]), Number(outputSourceMatch[2]));
+  }
   if (tag === 'reset-defaults') return Uint8Array.of(0xa5, DSP_CMD_RESET_DEFAULTS);
   const startupLevelsMatch = tag.match(/^startup-levels_([0-7])_([0-7])$/);
   if (startupLevelsMatch) {
@@ -1921,11 +1980,6 @@ function buildBlePacket(tag) {
       return null;
     }
     return Uint8Array.from([0xa5, nameCommand, ...nameBytes]);
-  }
-  const subPhaseMatch = tag.match(/^sub_phase_(0|180)$/);
-  if (subPhaseMatch) {
-    return Uint8Array.of(0xa5, DSP_CMD_SET_SUB_PHASE,
-      Number(subPhaseMatch[1]) === 180 ? 1 : 0);
   }
   const volumeTargets = {
     'l-gain': 0, 'r-gain': 1, 'sub-gain': 2, 'mic-output-gain': 3,
@@ -3181,6 +3235,10 @@ document.querySelectorAll('input[type="range"]:not(.eq-band), select').forEach((
       applyTopologySelection(el);
       return;
     }
+    if (el.matches('[data-output-index]')) {
+      sendTx(`output-source:${el.dataset.outputIndex}:${el.value}`);
+      return;
+    }
     const mirror = CHANNEL_TRIM_MIRRORS[el.id];
     if (mirror) setControlValueFromMcu(mirror, el.value);
     const key = `${el.id || el.tagName}:${el.value}`;
@@ -3192,16 +3250,6 @@ document.querySelectorAll('input[type="range"]:not(.eq-band), select').forEach((
     }
   });
 });
-
-function syncSubPhaseUI(phaseDeg) {
-  if (!subPhaseToggle) return;
-  const is180 = Number(phaseDeg) === 180;
-  subPhaseToggle.dataset.phase = is180 ? '180' : '0';
-  subPhaseToggle.setAttribute('aria-pressed', is180 ? 'true' : 'false');
-  subPhaseToggle.querySelector('.phase-label-0')?.classList.toggle('is-active', !is180);
-  subPhaseToggle.querySelector('.phase-label-180')?.classList.toggle('is-active', is180);
-  if (subPhaseState) subPhaseState.textContent = `Hiện tại: ${is180 ? '180°' : '0°'}`;
-}
 
 function syncSubModeUI(mode) {
   if (!subModeToggle) return;
@@ -3220,16 +3268,6 @@ if (subModeToggle) {
     const next = current === 'mono' ? 'stereo' : 'mono';
     syncSubModeUI(next);
     sendTx(`sub_mode_${next}`);
-  });
-}
-
-if (subPhaseToggle) {
-  syncSubPhaseUI(Number(subPhaseToggle.dataset.phase || '0'));
-  subPhaseToggle.addEventListener('click', () => {
-    const current = Number(subPhaseToggle.dataset.phase || '0');
-    const next = current === 0 ? 180 : 0;
-    syncSubPhaseUI(next);
-    sendTx(`sub_phase_${next}`);
   });
 }
 
@@ -3352,6 +3390,7 @@ updateDrcCurve();
 setConnUI();
 setBleToggleUI();
 setBleLinkState('Chưa kết nối BLE Web', 'bad');
+applyTopologyUi(0);
 showConnectScreen();
 appendRxLog('Giao diện đã sẵn sàng. Đang chờ dữ liệu BLE từ thiết bị...');
 initRangeLiveValues();

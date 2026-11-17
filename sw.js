@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dsp-interface-pot-v55-music-mic-decoupled-20261108';
+const CACHE_NAME = 'dsp-interface-pot-v60-access-gate-20261117';
 const ASSETS = [
   './',
   './index.html',
