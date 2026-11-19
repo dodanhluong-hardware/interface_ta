@@ -754,11 +754,13 @@ function handleBleDisconnected(event) {
 }
 
 function getWebBluetoothUnavailableReason() {
+  const hostname = (location.hostname || '').toLowerCase();
+  const loopback = ['localhost', '127.0.0.1', '::1'].includes(hostname);
   if (location.protocol === 'file:') {
     return 'BLE bị khóa khi mở file trực tiếp. Hãy mở giao diện bằng HTTPS hoặc localhost.';
   }
-  if (!window.isSecureContext) {
-    return 'BLE bị khóa vì trang không dùng HTTPS. Hãy mở đúng địa chỉ HTTPS của giao diện.';
+  if (location.protocol === 'http:' && !loopback) {
+    return 'Đang chuyển giao diện sang kết nối HTTPS an toàn. Vui lòng thử lại sau khi trang tải xong.';
   }
   try {
     if (window.self !== window.top) {
@@ -766,6 +768,11 @@ function getWebBluetoothUnavailableReason() {
     }
   } catch (_) {
     return 'BLE bị khóa trong cửa sổ nhúng. Hãy mở giao diện trực tiếp ở một tab mới.';
+  }
+  if (!window.isSecureContext) {
+    return location.protocol === 'https:'
+      ? 'Trang đang dùng HTTPS nhưng trình duyệt chưa cấp ngữ cảnh an toàn. Hãy mở trực tiếp https://ta.appdsp.shop trong một tab mới.'
+      : 'Web Bluetooth cần HTTPS hoặc localhost. Hãy mở https://ta.appdsp.shop.';
   }
   try {
     const policy = document.permissionsPolicy || document.featurePolicy;
@@ -779,7 +786,7 @@ function getWebBluetoothUnavailableReason() {
       typeof navigator.bluetooth.requestDevice !== 'function') {
     const isCocCoc = /coc_coc_browser|coccoc/i.test(navigator.userAgent || '');
     return isCocCoc
-      ? 'Cốc Cốc hiện không cung cấp Web Bluetooth cho trang này. Hãy cập nhật Cốc Cốc và mở trực tiếp bằng HTTPS; nếu vẫn lỗi, dùng Chrome hoặc Edge.'
+      ? 'Cốc Cốc hiện chưa cung cấp Web Bluetooth trong tab này. Hãy cập nhật trình duyệt hoặc mở giao diện bằng Chrome/Edge.'
       : 'Trình duyệt hiện không cung cấp Web Bluetooth. Hãy dùng Chrome hoặc Edge trên trang HTTPS.';
   }
   return '';

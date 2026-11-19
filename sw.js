@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dsp-interface-pot-v60-access-gate-20261117';
+const CACHE_NAME = 'dsp-interface-pot-v61-https-fix-20261119';
 const ASSETS = [
   './',
   './index.html',
